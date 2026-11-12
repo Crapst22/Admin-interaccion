@@ -4,12 +4,12 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 
 // Usuario hardcodeado (debe existir en Supabase Auth)
-const ALLOWED_EMAIL = "presentador@riesgos.com";
-const ALLOWED_PASSWORD = "Riesgos2026";
+const ALLOWED_EMAIL = "admin@gmail.com";
+const ALLOWED_PASSWORD = "12345678";
 
 export default function AuthForm() {
-  const [email, setEmail] = useState(ALLOWED_EMAIL);
-  const [password, setPassword] = useState(ALLOWED_PASSWORD);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
