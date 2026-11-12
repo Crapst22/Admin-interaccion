@@ -18,7 +18,7 @@ export default function HostPage() {
   const supabase = useMemo(() => createClient(), []);
   const [bracketName, setBracketName] = useState("");
   const [items, setItems] = useState<Item[]>([]);
-  const [duration, setDuration] = useState(30);
+  const [durationInput, setDurationInput] = useState("");
   const [nodes, setNodes] = useState<MatchNode[]>([]);
   const [session, setSession] = useState<Session | null>(null);
   const [dbMatches, setDbMatches] = useState<Match[]>([]);
@@ -48,7 +48,8 @@ export default function HostPage() {
   async function createSession() {
     if (nodes.length === 0) return;
     const payload = nodes.map(n => ({ round: n.round, slot: n.slot, item_a_id: n.itemA?.id || null, item_b_id: n.itemB?.id || null, winner_id: n.winnerId, status: n.status, votes_a: 0, votes_b: 0, next_index: n.nextIndex, next_slot: n.nextSlot }));
-    const safeDuration = Math.max(5, Math.min(300, Number(duration) || 30));
+    const parsed = parseInt(durationInput, 10);
+    const safeDuration = Math.max(5, Math.min(300, Number.isFinite(parsed) ? parsed : 30));
     const res = await fetch("/api/sessions/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bracket_id: bracketId, duration_seconds: safeDuration, matches: payload }) });
     const j = await res.json();
     if (!res.ok) { alert(j.error || "Error"); return; }
@@ -196,7 +197,7 @@ export default function HostPage() {
 
       {!session && (
         <div className="card p-5 mb-6 flex flex-col md:flex-row gap-4 items-end">
-          <div><label>Segundos por enfrentamiento</label><input type="number" min={5} max={300} className="input mt-1 w-40" value={duration} onChange={e => setDuration(Math.max(5, Math.min(300, parseInt(e.target.value || "30", 10) || 30)))} /></div>
+          <div><label>Segundos por enfrentamiento</label><input type="number" min={5} max={300} placeholder="30" className="input mt-1 w-40" value={durationInput} onChange={e => setDurationInput(e.target.value)} /></div>
           <button onClick={doGenerate} className="btn btn-secondary">Generar llave</button>
           <button onClick={doGenerate} className="btn btn-secondary">Volver a mezclar</button>
           {nodes.length > 0 && <button onClick={createSession} className="btn btn-primary">Crear sala y mostrar QR</button>}
