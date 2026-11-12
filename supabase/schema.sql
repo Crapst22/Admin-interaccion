@@ -45,8 +45,14 @@ create table if not exists public.matches (
   status match_status not null default 'pending',
   voting_ends_at timestamptz,
   next_match_id uuid references public.matches(id) on delete set null,
-  next_slot text check (next_slot in ('a','b'))
+  next_slot text check (next_slot in ('a','b')),
+  is_bye boolean not null default false,
+  tie_broken boolean not null default false
 );
+
+-- Compatibilidad si la tabla ya existía
+alter table public.matches add column if not exists is_bye boolean not null default false;
+alter table public.matches add column if not exists tie_broken boolean not null default false;
 
 alter table public.sessions
   drop constraint if exists sessions_current_match_fkey,

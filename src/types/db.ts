@@ -13,5 +13,9 @@ export type Match = {
   item_a_id: string | null; item_b_id: string | null; winner_id: string | null;
   votes_a: number; votes_b: number; status: MatchStatus; voting_ends_at: string | null;
   next_match_id: string | null; next_slot: "a" | "b" | null;
+  is_bye: boolean; tie_broken: boolean;
 };
-export type Standing = { item_id: string; name: string; image_url: string; total_votes: number };
+export type Standing = {
+  item_id: string; name: string; image_url: string; total_votes: number;
+  round_reached: number; matches_played: number; position: number; label: string;
+};

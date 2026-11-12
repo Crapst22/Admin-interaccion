@@ -21,8 +21,9 @@ export async function POST(req: NextRequest) {
     const { data: ins, error } = await admin.from("matches").insert({
       session_id: session.id, round: m.round, slot: m.slot,
       item_a_id: m.item_a_id, item_b_id: m.item_b_id,
-      winner_id: m.winner_id || null, votes_a: 0, votes_b: 0,
+      winner_id: m.winner_id || null, votes_a: m.votes_a || 0, votes_b: m.votes_b || 0,
       status: m.status || "pending", voting_ends_at: null,
+      is_bye: !!m.is_bye, tie_broken: !!m.tie_broken,
     }).select("id").single();
     if (error || !ins) return NextResponse.json({ error: error?.message }, { status: 500 });
     idMap[i] = ins.id;

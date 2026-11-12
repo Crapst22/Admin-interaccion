@@ -2,15 +2,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Item, Match, Session, Standing } from "@/types/db";
-import { generateBracket, MatchNode } from "@/lib/bracket";
+import type { Item, Match, Session } from "@/types/db";
+import { generateBracket, computeStandings, BracketMatch, Standing } from "@/lib/bracket";
 import { QRCodeSVG } from "qrcode.react";
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
 import Confetti from "@/components/Confetti";
 import StandingsTable from "@/components/StandingsTable";
-
-type DisplayMatch = Match & { itemA?: Item | null; itemB?: Item | null };
 
 export default function HostPage() {
   const params = useParams<{ id: string }>();
@@ -19,7 +17,7 @@ export default function HostPage() {
   const [bracketName, setBracketName] = useState("");
   const [items, setItems] = useState<Item[]>([]);
   const [durationInput, setDurationInput] = useState("");
-  const [nodes, setNodes] = useState<MatchNode[]>([]);
+  const [nodes, setNodes] = useState<BracketMatch[]>([]);
   const [session, setSession] = useState<Session | null>(null);
   const [dbMatches, setDbMatches] = useState<Match[]>([]);
   const [nowOffset, setNowOffset] = useState(0);
@@ -43,11 +41,19 @@ export default function HostPage() {
   const siteUrl = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_SITE_URL || window.location.origin) : "";
   const voteUrl = session ? `${siteUrl}/vote/${session.id}` : "";
 
-  function doGenerate() { if (items.length >= 2) setNodes(generateBracket(items)); }
+  function doGenerate() {
+    if (items.length < 2) { alert("Agregá al menos 2 elementos"); return; }
+    setNodes(generateBracket(items.map(i => ({ id: i.id, name: i.name, image_url: i.image_url }))));
+  }
 
   async function createSession() {
     if (nodes.length === 0) return;
-    const payload = nodes.map(n => ({ round: n.round, slot: n.slot, item_a_id: n.itemA?.id || null, item_b_id: n.itemB?.id || null, winner_id: n.winnerId, status: n.status, votes_a: 0, votes_b: 0, next_index: n.nextIndex, next_slot: n.nextSlot }));
+    if (items.length < 2) { alert("Agregá al menos 2 elementos"); return; }
+    const payload = nodes.map(n => ({
+      round: n.round, slot: n.slot, item_a_id: n.item_a_id, item_b_id: n.item_b_id,
+      winner_id: n.winner_id, status: n.status, votes_a: n.votes_a, votes_b: n.votes_b,
+      next_index: n.next_index, next_slot: n.next_slot, is_bye: n.is_bye, tie_broken: n.tie_broken,
+    }));
     const parsed = parseInt(durationInput, 10);
     const safeDuration = Math.max(5, Math.min(300, Number.isFinite(parsed) ? parsed : 30));
     const res = await fetch("/api/sessions/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bracket_id: bracketId, duration_seconds: safeDuration, matches: payload }) });
@@ -90,48 +96,45 @@ export default function HostPage() {
         const res = await fetch(`/api/sessions/${sid}/advance`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ match_id: mid }) });
         const j = await res.json().catch(() => ({}));
         await loadDbMatches(sid); await refreshSession(sid);
-        if (j.tie) {
-          setNotice("Empate: se repite la votación");
-          autoAdvancing.current = false;
-          setTimeout(() => setNotice(null), 2500);
-        } else {
-          setTimeout(() => { autoAdvancing.current = false; }, 1500);
-        }
+        if (j.tie_broken) setNotice("Empate, decidido al azar");
+        setTimeout(() => { setNotice(null); autoAdvancing.current = false; }, 2500);
       })();
     }
   }, [timeLeft, current, paused, session, loadDbMatches, refreshSession]);
 
   useEffect(() => { if (current?.status === "voting") autoAdvancing.current = false; }, [current?.id, current?.status]);
 
-  const computeStandings = useCallback(async () => {
+  useEffect(() => {
+    if (session?.status === "finished" && dbMatches.length) {
+      const st = computeStandings(items.map(i => ({ id: i.id, name: i.name, image_url: i.image_url })), dbMatches as unknown as BracketMatch[]);
+      setStandings(st);
+    }
+  }, [session?.status, dbMatches, items]);
+
+  async function start() {
     if (!session) return;
-    const { data: ms } = await supabase.from("matches").select("item_a_id,item_b_id,votes_a,votes_b").eq("session_id", session.id);
-    const totals: Record<string, number> = {}; items.forEach(i => { totals[i.id] = 0; });
-    ((ms || []) as { item_a_id: string | null; item_b_id: string | null; votes_a: number; votes_b: number }[]).forEach((m) => {
-      if (m.item_a_id) totals[m.item_a_id] = (totals[m.item_a_id] || 0) + (m.votes_a || 0);
-      if (m.item_b_id) totals[m.item_b_id] = (totals[m.item_b_id] || 0) + (m.votes_b || 0);
-    });
-    const st = items.map(i => ({ item_id: i.id, name: i.name, image_url: i.image_url, total_votes: totals[i.id] || 0 })).sort((a, b) => b.total_votes - a.total_votes);
-    setStandings(st);
-  }, [session, supabase, items]);
-
-  useEffect(() => { if (session?.status === "finished") void computeStandings(); }, [session?.status, computeStandings]);
-
-  async function start() { if (!session) return; await fetch(`/api/sessions/${session.id}/start`, { method: "POST" }); await loadDbMatches(session.id); await refreshSession(session.id); }
+    if (items.length < 2) { alert("Agregá al menos 2 elementos"); return; }
+    await fetch(`/api/sessions/${session.id}/start`, { method: "POST" });
+    await loadDbMatches(session.id); await refreshSession(session.id);
+  }
   async function skip() { if (!session) return; await fetch(`/api/sessions/${session.id}/advance`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ match_id: session.current_match_id }) }); await loadDbMatches(session.id); await refreshSession(session.id); }
   async function togglePause() { if (!session) return; const action = paused ? "resume" : "pause"; await fetch(`/api/sessions/${session.id}/pause`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) }); setPaused(!paused); }
-  async function newSession() { if (!session) return; await fetch(`/api/sessions/${session.id}/reset`, { method: "POST" }); setSession(null); setDbMatches([]); setStandings([]); setNotice(null); }
+  async function newSession() { if (!session) return; await fetch(`/api/sessions/${session.id}/reset`, { method: "POST" }); setSession(null); setDbMatches([]); setStandings([]); setNotice(null); setPaused(false); }
 
   const rounds = useMemo(() => {
     const r: Record<number, Match[]> = {}; dbMatches.forEach(m => { (r[m.round] = r[m.round] || []).push(m); });
     Object.values(r).forEach(a => a.sort((x, y) => x.slot - y.slot)); return r;
   }, [dbMatches]);
-  const roundNums = Object.keys(rounds).map(Number).sort((a, b) => a - b);
+  const previewRounds = useMemo(() => {
+    const r: Record<number, BracketMatch[]> = {}; nodes.forEach(m => { (r[m.round] = r[m.round] || []).push(m); });
+    Object.values(r).forEach(a => a.sort((x, y) => x.slot - y.slot)); return r;
+  }, [nodes]);
+  const roundNums = (dbMatches.length ? Object.keys(rounds) : Object.keys(previewRounds)).map(Number).sort((a, b) => a - b);
 
-  const championId = session?.status === "finished" && roundNums.length ? rounds[Math.max(...roundNums)][0]?.winner_id : null;
+  const championId = session?.status === "finished" && roundNums.length ? (rounds[Math.max(...roundNums)]?.[0]?.winner_id ?? null) : null;
   const champion = championId ? itemMap[championId] : null;
 
-  if (!items.length && !bracketName) return <main className="min-h-screen flex items-center justify-center">Cargando…</main>;
+  if (!bracketName && !items.length) return <main className="min-h-screen flex items-center justify-center">Cargando…</main>;
 
   if (session?.status === "finished") {
     return (
@@ -157,7 +160,7 @@ export default function HostPage() {
     return (
       <main className="min-h-screen p-4 md:p-8 flex flex-col">
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-          <h2 className="text-2xl font-bold">{bracketName}</h2>
+          <div className="flex items-center gap-3"><a href="/dashboard" className="btn btn-secondary">← Dashboard</a><h2 className="text-2xl font-bold">{bracketName}</h2></div>
           <div className="flex gap-2 flex-wrap">
             <button onClick={togglePause} className="btn btn-secondary">{paused ? "Reanudar" : "Pausar"}</button>
             <button onClick={skip} className="btn btn-secondary">Saltar</button>
@@ -165,12 +168,12 @@ export default function HostPage() {
         </div>
         {notice && <div className="text-center text-amber-300 text-2xl font-bold mb-2">{notice}</div>}
         <AnimatePresence mode="wait">
-          <motion.div key={current.id} initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 1.05, opacity: 0 }} className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+          <motion.div key={current.id} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 1.02, opacity: 0 }} className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
             {[{ it: a, v: current.votes_a }, { it: b, v: current.votes_b }].map((side, idx) => (
               <div key={idx} className="card p-4 md:p-8 flex flex-col items-center justify-center text-center gap-4">
                 {side.it && <div className="relative w-40 h-40 md:w-64 md:h-64 rounded-xl overflow-hidden bg-slate-900"><Image src={side.it.image_url} alt={side.it.name} fill className="object-cover" unoptimized /></div>}
                 <p className="text-3xl md:text-5xl font-extrabold">{side.it?.name || "—"}</p>
-                <motion.p key={side.v} initial={{ scale: 1.4 }} animate={{ scale: 1 }} className="text-6xl md:text-7xl font-black text-amber-400">{side.v}</motion.p>
+                <motion.p key={side.v} initial={{ scale: 1.3 }} animate={{ scale: 1 }} className="text-6xl md:text-7xl font-black text-amber-400">{side.v}</motion.p>
                 <div className="w-full h-4 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-amber-500" style={{ width: `${(side.v / total) * 100}%` }} /></div>
               </div>
             ))}
@@ -179,11 +182,28 @@ export default function HostPage() {
         <div className="mt-6 flex flex-col items-center gap-2">
           <div className="text-5xl font-mono font-bold text-cyan-300">{timeLeft}s</div>
           <div className="w-full max-w-xl h-3 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-cyan-400 transition-all" style={{ width: `${Math.min(100, (timeLeft / (session.duration_seconds || 1)) * 100)}%` }} /></div>
-          <div className="text-slate-400">Votá en: <span className="text-white">{voteUrl}</span></div>
+          <div className="text-slate-400">Votá en: <span className="text-white break-all">{voteUrl}</span></div>
         </div>
       </main>
     );
   }
+
+  const renderMatchCard = (m: Match | BracketMatch) => {
+    const aId = m.item_a_id; const bId = m.item_b_id;
+    const aName = aId ? itemMap[aId]?.name : "—";
+    const bName = bId ? itemMap[bId]?.name : (m.is_bye ? "Pasa directo" : "—");
+    const win = m.winner_id;
+    const active = m.status === "voting";
+    return (
+      <div key={`${m.round}-${m.slot}-${("id" in m && m.id) || "p"}`} className={`card p-3 text-sm ${active ? "ring-2 ring-amber-400" : ""} ${m.is_bye ? "border-dashed border-cyan-500/50 bg-cyan-950/20" : ""}`}>
+        {m.is_bye && <div className="text-[10px] uppercase tracking-wider text-cyan-300 mb-1 font-bold">Pasa directo</div>}
+        <div className={`p-1 rounded ${win && win === aId ? "bg-emerald-700/60 font-bold" : ""}`}>{aName} <span className="text-slate-400">({m.votes_a ?? 0})</span></div>
+        <div className="text-slate-500 text-xs my-1">vs</div>
+        <div className={`p-1 rounded ${win && win === bId ? "bg-emerald-700/60 font-bold" : ""}`}>{bName} {!m.is_bye && <span className="text-slate-400">({m.votes_b ?? 0})</span>}</div>
+        {m.tie_broken && <div className="text-xs text-amber-300 mt-1">Empate, decidido al azar</div>}
+      </div>
+    );
+  };
 
   return (
     <main className="min-h-screen p-6 md:p-10">
@@ -196,11 +216,12 @@ export default function HostPage() {
       </div>
 
       {!session && (
-        <div className="card p-5 mb-6 flex flex-col md:flex-row gap-4 items-end">
+        <div className="card p-5 mb-6 flex flex-col md:flex-row gap-4 items-end flex-wrap">
           <div><label>Segundos por enfrentamiento</label><input type="number" min={5} max={300} placeholder="30" className="input mt-1 w-40" value={durationInput} onChange={e => setDurationInput(e.target.value)} /></div>
           <button onClick={doGenerate} className="btn btn-secondary">Generar llave</button>
           <button onClick={doGenerate} className="btn btn-secondary">Volver a mezclar</button>
           {nodes.length > 0 && <button onClick={createSession} className="btn btn-primary">Crear sala y mostrar QR</button>}
+          {items.length < 2 && <span className="text-rose-400">Agregá al menos 2 elementos</span>}
         </div>
       )}
 
@@ -224,34 +245,13 @@ export default function HostPage() {
       )}
 
       <div className="overflow-auto">
-        <div className="flex gap-6 min-w-max pb-4">
-          {(dbMatches.length ? roundNums : Array.from(new Set(nodes.map(n => n.round))).sort((a, b) => a - b)).map(r => {
-            const ms: DisplayMatch[] = dbMatches.length ? (rounds[r] || []) : nodes.filter(n => n.round === r).map((n) => ({
-              id: `p-${r}-${n.slot}`, session_id: "", round: n.round, slot: n.slot,
-              item_a_id: n.itemA?.id || null, item_b_id: n.itemB?.id || null,
-              winner_id: n.winnerId, votes_a: 0, votes_b: 0, status: n.status,
-              voting_ends_at: null, next_match_id: null, next_slot: null,
-              itemA: n.itemA, itemB: n.itemB,
-            } as DisplayMatch));
+        <div className="flex gap-6 min-w-max pb-4 items-start">
+          {roundNums.map(r => {
+            const ms = dbMatches.length ? (rounds[r] || []) : (previewRounds[r] || []);
             return (
-              <div key={r} className="flex flex-col gap-4 min-w-[220px]">
+              <div key={r} className="flex flex-col gap-4 min-w-[230px]">
                 <h3 className="text-lg font-bold text-slate-300">Ronda {r}</h3>
-                {ms.map((m) => {
-                  const aName = m.item_a_id ? itemMap[m.item_a_id]?.name : (m.itemA?.name ?? "—");
-                  const bName = m.item_b_id ? itemMap[m.item_b_id]?.name : (m.itemB?.name ?? (m.item_a_id ? "Pasa directo" : "—"));
-                  const done = m.status === "done";
-                  const win = m.winner_id;
-                  const aId = m.item_a_id; const bId = m.item_b_id;
-                  const isBye = m.item_a_id && !m.item_b_id;
-                  return (
-                    <div key={m.id} className={`card p-3 text-sm ${m.status === "voting" ? "ring-2 ring-amber-400" : ""}`}>
-                      <div className={`p-1 rounded ${win && win === aId ? "bg-emerald-700/60 font-bold" : ""}`}>{aName || "—"} {m.votes_a != null ? `(${m.votes_a})` : ""}</div>
-                      <div className="text-slate-500 text-xs my-1">vs</div>
-                      <div className={`p-1 rounded ${win && win === bId ? "bg-emerald-700/60 font-bold" : ""}`}>{isBye ? "Pasa directo" : (bName || "—")} {bId ? `(${m.votes_b})` : ""}</div>
-                      {done && !aId && !bId ? <div className="text-xs text-slate-500 mt-1">—</div> : null}
-                    </div>
-                  );
-                })}
+                {ms.map((m) => renderMatchCard(m as Match | BracketMatch))}
               </div>
             );
           })}

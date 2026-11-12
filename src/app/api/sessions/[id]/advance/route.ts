@@ -22,24 +22,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   const mid = match_id || session.current_match_id;
+  let tieBroken = false;
   if (mid) {
     const { data: m } = await admin.from("matches").select("*").eq("id", mid).single();
     if (m && m.status === "voting") {
-      let winnerId = m.winner_id;
+      let winnerId = m.winner_id as string | null;
       if (!winnerId) {
         if (m.votes_a > m.votes_b) winnerId = m.item_a_id;
         else if (m.votes_b > m.votes_a) winnerId = m.item_b_id;
+        else {
+          winnerId = Math.random() < 0.5 ? m.item_a_id : m.item_b_id;
+          tieBroken = true;
+        }
       }
-      if (!winnerId) {
-        // Empate: repetir votación (reiniciar votos y tiempo)
-        await admin.from("votes").delete().eq("match_id", mid);
-        const ends = new Date(Date.now() + (session.duration_seconds || 30) * 1000).toISOString();
-        await admin.from("matches").update({ votes_a: 0, votes_b: 0, voting_ends_at: ends, status: "voting" }).eq("id", mid);
-        await admin.from("sessions").update({ current_match_id: mid, status: "running" }).eq("id", session.id);
-        const { data: updated } = await admin.from("sessions").select("*").eq("id", session.id).single();
-        return NextResponse.json({ session: updated, tie: true });
-      }
-      await admin.from("matches").update({ status: "done", winner_id: winnerId, voting_ends_at: new Date().toISOString() }).eq("id", mid);
+      await admin.from("matches").update({ status: "done", winner_id: winnerId, tie_broken: tieBroken, voting_ends_at: new Date().toISOString() }).eq("id", mid);
       if (winnerId && m.next_match_id) {
         const field = m.next_slot === "a" ? "item_a_id" : "item_b_id";
         await admin.from("matches").update({ [field]: winnerId }).eq("id", m.next_match_id);
@@ -50,5 +46,5 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   await resolveByesAndOpenNext(admin, session.id, session.duration_seconds);
   if (force_finish) await admin.from("sessions").update({ status: "finished", current_match_id: null }).eq("id", session.id);
   const { data: updated } = await admin.from("sessions").select("*").eq("id", session.id).single();
-  return NextResponse.json({ session: updated, tie: false });
+  return NextResponse.json({ session: updated, tie_broken: tieBroken });
 }
