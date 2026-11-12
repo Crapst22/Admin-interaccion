@@ -20,11 +20,11 @@ export default function HostPage() {
   const [nodes, setNodes] = useState<BracketMatch[]>([]);
   const [session, setSession] = useState<Session | null>(null);
   const [dbMatches, setDbMatches] = useState<Match[]>([]);
-  const [nowOffset, setNowOffset] = useState(0);
   const [tick, setTick] = useState(Date.now());
   const [notice, setNotice] = useState<string | null>(null);
   const [standings, setStandings] = useState<Standing[]>([]);
   const [paused, setPaused] = useState(false);
+  const [localEnd, setLocalEnd] = useState<number | null>(null);
   const autoAdvancing = useRef(false);
 
   useEffect(() => { (async () => {
@@ -35,8 +35,6 @@ export default function HostPage() {
   })(); }, [bracketId, supabase]);
 
   useEffect(() => { const t = setInterval(() => setTick(Date.now()), 250); return () => clearInterval(t); }, []);
-  const syncTime = useCallback(async () => { try { const r = await fetch("/api/time"); const j = await r.json(); setNowOffset(j.now - Date.now()); } catch {} }, []);
-  useEffect(() => { syncTime(); }, [syncTime]);
 
   const siteUrl = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_SITE_URL || window.location.origin) : "";
   const voteUrl = session ? `${siteUrl}/vote/${session.id}` : "";
@@ -85,9 +83,11 @@ export default function HostPage() {
 
   const current = dbMatches.find(m => m.id === session?.current_match_id) || null;
   const itemMap = useMemo(() => { const m: Record<string, Item> = {}; items.forEach(i => { m[i.id] = i; }); return m; }, [items]);
-  const rawLeft = current?.voting_ends_at ? Math.ceil((new Date(current.voting_ends_at).getTime() - (tick + nowOffset)) / 1000) : 0;
-  const timeLeft = Math.max(0, rawLeft);
-  useEffect(() => { if (current?.status === "voting") syncTime(); }, [current?.id, current?.status, syncTime]);
+  useEffect(() => {
+    if (current?.status === "voting") setLocalEnd(Date.now() + (session?.duration_seconds || 30) * 1000);
+    else setLocalEnd(null);
+  }, [current?.id, current?.status, session?.duration_seconds]);
+  const timeLeft = localEnd ? Math.max(0, Math.ceil((localEnd - tick) / 1000)) : 0;
 
   useEffect(() => {
     if (!session || !current || current.status !== "voting" || paused) return;
