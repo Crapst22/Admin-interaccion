@@ -48,7 +48,8 @@ export default function HostPage() {
   async function createSession() {
     if (nodes.length === 0) return;
     const payload = nodes.map(n => ({ round: n.round, slot: n.slot, item_a_id: n.itemA?.id || null, item_b_id: n.itemB?.id || null, winner_id: n.winnerId, status: n.status, votes_a: 0, votes_b: 0, next_index: n.nextIndex, next_slot: n.nextSlot }));
-    const res = await fetch("/api/sessions/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bracket_id: bracketId, duration_seconds: duration, matches: payload }) });
+    const safeDuration = Math.max(5, Math.min(300, Number(duration) || 30));
+    const res = await fetch("/api/sessions/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bracket_id: bracketId, duration_seconds: safeDuration, matches: payload }) });
     const j = await res.json();
     if (!res.ok) { alert(j.error || "Error"); return; }
     setSession(j.session as Session); await loadDbMatches((j.session as Session).id);
@@ -83,12 +84,18 @@ export default function HostPage() {
     if (!session || !current || current.status !== "voting" || paused) return;
     if (timeLeft <= 0 && !autoAdvancing.current) {
       autoAdvancing.current = true;
-      const sid = session.id; const mid = current.id; const wasTie = current.votes_a === current.votes_b;
+      const sid = session.id; const mid = current.id;
       (async () => {
-        await fetch(`/api/sessions/${sid}/advance`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ match_id: mid }) });
+        const res = await fetch(`/api/sessions/${sid}/advance`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ match_id: mid }) });
+        const j = await res.json().catch(() => ({}));
         await loadDbMatches(sid); await refreshSession(sid);
-        if (wasTie) setNotice("Empate, decidido al azar");
-        setTimeout(() => { setNotice(null); autoAdvancing.current = false; }, 3500);
+        if (j.tie) {
+          setNotice("Empate: se repite la votación");
+          autoAdvancing.current = false;
+          setTimeout(() => setNotice(null), 2500);
+        } else {
+          setTimeout(() => { autoAdvancing.current = false; }, 1500);
+        }
       })();
     }
   }, [timeLeft, current, paused, session, loadDbMatches, refreshSession]);
@@ -133,7 +140,10 @@ export default function HostPage() {
         {champion && <div className="card p-6 flex flex-col items-center gap-3"><div className="relative w-48 h-48 rounded-xl overflow-hidden"><Image src={champion.image_url} alt={champion.name} fill className="object-cover" unoptimized /></div><p className="text-4xl font-extrabold">{champion.name}</p></div>}
         <div className="w-full flex flex-col lg:flex-row gap-6 items-start justify-center">
           <StandingsTable standings={standings} />
-          <button onClick={newSession} className="btn btn-primary text-lg px-6 py-3">Nueva votación</button>
+          <div className="flex flex-col gap-3">
+            <button onClick={newSession} className="btn btn-primary text-lg px-6 py-3">Nueva votación</button>
+            <a href="/dashboard" className="btn btn-secondary text-lg px-6 py-3 text-center">Volver al dashboard</a>
+          </div>
         </div>
       </main>
     );
@@ -177,13 +187,16 @@ export default function HostPage() {
   return (
     <main className="min-h-screen p-6 md:p-10">
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <h1 className="text-4xl font-extrabold">{bracketName || "Presentador"}</h1>
+        <div className="flex items-center gap-3">
+          <a href="/dashboard" className="btn btn-secondary">← Dashboard</a>
+          <h1 className="text-4xl font-extrabold">{bracketName || "Presentador"}</h1>
+        </div>
         {session && <button onClick={newSession} className="btn btn-danger">Reiniciar sesión</button>}
       </div>
 
       {!session && (
         <div className="card p-5 mb-6 flex flex-col md:flex-row gap-4 items-end">
-          <div><label>Segundos por enfrentamiento</label><input type="number" min={5} className="input mt-1 w-40" value={duration} onChange={e => setDuration(parseInt(e.target.value || "30"))} /></div>
+          <div><label>Segundos por enfrentamiento</label><input type="number" min={5} max={300} className="input mt-1 w-40" value={duration} onChange={e => setDuration(Math.max(5, Math.min(300, parseInt(e.target.value || "30", 10) || 30)))} /></div>
           <button onClick={doGenerate} className="btn btn-secondary">Generar llave</button>
           <button onClick={doGenerate} className="btn btn-secondary">Volver a mezclar</button>
           {nodes.length > 0 && <button onClick={createSession} className="btn btn-primary">Crear sala y mostrar QR</button>}

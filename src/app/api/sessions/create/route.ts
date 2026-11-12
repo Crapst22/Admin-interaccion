@@ -7,11 +7,12 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   const { bracket_id, duration_seconds, matches } = await req.json();
+  const duration = Math.max(5, Math.min(300, Number(duration_seconds) || 30));
   // matches: array of {round,slot,item_a_id,item_b_id,winner_id,status,votes_a,votes_b,next_index,next_slot}
   const { data: bracket } = await supabase.from("brackets").select("id").eq("id", bracket_id).eq("owner_id", user.id).single();
   if (!bracket) return NextResponse.json({ error: "Llave no encontrada" }, { status: 404 });
   const admin = createAdminClient();
-  const { data: session, error: sErr } = await admin.from("sessions").insert({ bracket_id, owner_id: user.id, status: "waiting", duration_seconds }).select("*").single();
+  const { data: session, error: sErr } = await admin.from("sessions").insert({ bracket_id, owner_id: user.id, status: "waiting", duration_seconds: duration }).select("*").single();
   if (sErr || !session) return NextResponse.json({ error: sErr?.message }, { status: 500 });
   // insertar matches en dos pasadas para next_match_id
   const idMap: string[] = [];

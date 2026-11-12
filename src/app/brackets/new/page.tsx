@@ -8,8 +8,8 @@ export default async function NewBracketPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
   return (
-    <main className="min-h-screen p-6 md:p-10">
-      <Link href="/dashboard" className="text-amber-400 hover:underline">← Volver</Link>
+    <main className="page-wrap">
+      <Link href="/dashboard" className="btn btn-secondary mb-4">← Volver al dashboard</Link>
       <div className="mt-4"><BracketForm /></div>
     </main>
   );

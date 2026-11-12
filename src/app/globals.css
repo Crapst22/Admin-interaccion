@@ -2,13 +2,29 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { --bg: #0b1020; --panel: #141a2e; --accent: #f59e0b; --accent2: #22d3ee; --text: #eef2ff; }
-html, body { height: 100%; }
-body { background: radial-gradient(1200px 600px at 10% -10%, #1a2340, transparent), var(--bg); color: var(--text); }
-.btn { @apply inline-flex items-center justify-center rounded-lg px-4 py-2 font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed; }
-.btn-primary { @apply bg-amber-500 text-slate-950 hover:bg-amber-400; }
-.btn-secondary { @apply bg-slate-700 text-white hover:bg-slate-600; }
-.btn-danger { @apply bg-rose-600 text-white hover:bg-rose-500; }
-.card { @apply bg-slate-800/70 border border-slate-700 rounded-xl backdrop-blur; }
-.input { @apply w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500; }
-label { @apply text-sm text-slate-300; }
+:root {
+  --bg: #071018;
+  --bg-2: #0c1624;
+  --panel: rgba(18, 28, 45, 0.78);
+  --accent: #f59e0b;
+  --accent-2: #22d3ee;
+  --text: #eaf2ff;
+}
+html, body { min-height: 100%; }
+body {
+  background:
+    radial-gradient(900px 500px at 0% -10%, rgba(245,158,11,0.18), transparent 60%),
+    radial-gradient(800px 500px at 100% 0%, rgba(34,211,238,0.14), transparent 55%),
+    linear-gradient(180deg, var(--bg-2), var(--bg));
+  color: var(--text);
+  font-family: "Segoe UI Variable Display", "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
+}
+.btn { @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-semibold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm; }
+.btn-primary { @apply bg-amber-500 text-slate-950 hover:bg-amber-400 hover:-translate-y-0.5 shadow-amber-500/20; }
+.btn-secondary { @apply bg-slate-700/80 text-white hover:bg-slate-600 border border-slate-600/60; }
+.btn-danger { @apply bg-rose-600/90 text-white hover:bg-rose-500; }
+.card { @apply bg-slate-900/60 border border-slate-700/70 rounded-2xl backdrop-blur-md shadow-lg shadow-black/20; }
+.input { @apply w-full rounded-xl bg-slate-950/70 border border-slate-700 px-3.5 py-2.5 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/70 focus:border-amber-500/70; }
+label { @apply text-sm font-medium text-slate-300; }
+.page-wrap { @apply min-h-screen p-5 md:p-10 max-w-6xl mx-auto; }
+.title-xl { @apply text-4xl md:text-5xl font-extrabold tracking-tight; }

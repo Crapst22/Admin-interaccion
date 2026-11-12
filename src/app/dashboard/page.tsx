@@ -25,10 +25,17 @@ export default async function DashboardPage() {
   const { data: brackets } = await supabase.from("brackets").select("id,name,created_at,items(count)").eq("owner_id", user.id).order("created_at", { ascending: false });
 
   return (
-    <main className="min-h-screen p-6 md:p-10 max-w-6xl mx-auto">
-      <header className="flex items-center justify-between mb-8">
-        <div><h1 className="text-4xl font-extrabold">Mis llaves</h1><p className="text-slate-400">{user.email}</p></div>
-        <form action={signOut}><button className="btn btn-secondary">Salir</button></form>
+    <main className="page-wrap">
+      <header className="flex items-center justify-between mb-8 gap-4">
+        <div>
+          <p className="text-amber-400/90 text-sm font-semibold uppercase tracking-widest mb-1">Panel</p>
+          <h1 className="title-xl">Mis llaves</h1>
+          <p className="text-slate-400 mt-1">{user.email}</p>
+        </div>
+        <div className="flex gap-2">
+          <Link href="/" className="btn btn-secondary">Inicio</Link>
+          <form action={signOut}><button className="btn btn-secondary">Salir</button></form>
+        </div>
       </header>
       <div className="grid gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         <Link href="/brackets/new" className="card flex flex-col items-center justify-center min-h-[180px] border-dashed border-2 border-amber-500/60 hover:bg-slate-800 transition">
