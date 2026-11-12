@@ -192,14 +192,13 @@ export function computeStandings(items: BracketItem[], matches: BracketMatch[]):
   rows.sort((a, b) => {
     if (b.round_reached !== a.round_reached) return b.round_reached - a.round_reached;
     if (b.total_votes !== a.total_votes) return b.total_votes - a.total_votes;
-    if (b.pct !== a.pct) return b.pct - a.pct;
     return 0;
   });
 
   let pos = 0;
   let lastKey = "";
   const result: Standing[] = rows.map((r, i) => {
-    const key = `${r.round_reached}|${r.total_votes}|${r.pct}`;
+    const key = `${r.round_reached}|${r.total_votes}`;
     if (key !== lastKey) { pos = i + 1; lastKey = key; }
     return {
       item_id: r.id,
