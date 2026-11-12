@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { --bg: #0b1020; --panel: #141a2e; --accent: #f59e0b; --accent2: #22d3ee; --text: #eef2ff; }
+html, body { height: 100%; }
+body { background: radial-gradient(1200px 600px at 10% -10%, #1a2340, transparent), var(--bg); color: var(--text); }
+.btn { @apply inline-flex items-center justify-center rounded-lg px-4 py-2 font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed; }
+.btn-primary { @apply bg-amber-500 text-slate-950 hover:bg-amber-400; }
+.btn-secondary { @apply bg-slate-700 text-white hover:bg-slate-600; }
+.btn-danger { @apply bg-rose-600 text-white hover:bg-rose-500; }
+.card { @apply bg-slate-800/70 border border-slate-700 rounded-xl backdrop-blur; }
+.input { @apply w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500; }
+label { @apply text-sm text-slate-300; }
