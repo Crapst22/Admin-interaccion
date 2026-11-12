@@ -87,7 +87,9 @@ export default function HostPage() {
     if (current?.status === "voting") setLocalEnd(Date.now() + (session?.duration_seconds || 30) * 1000);
     else setLocalEnd(null);
   }, [current?.id, current?.status, session?.duration_seconds]);
-  const timeLeft = localEnd ? Math.max(0, Math.ceil((localEnd - tick) / 1000)) : 0;
+  const timeLeft = localEnd
+    ? Math.max(0, Math.ceil((localEnd - tick) / 1000))
+    : (current?.status === "voting" ? (session?.duration_seconds || 30) : 0);
 
   useEffect(() => {
     if (!session || !current || current.status !== "voting" || paused) return;
