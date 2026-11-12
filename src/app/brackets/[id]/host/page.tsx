@@ -86,8 +86,7 @@ export default function HostPage() {
   const current = dbMatches.find(m => m.id === session?.current_match_id) || null;
   const itemMap = useMemo(() => { const m: Record<string, Item> = {}; items.forEach(i => { m[i.id] = i; }); return m; }, [items]);
   const rawLeft = current?.voting_ends_at ? Math.ceil((new Date(current.voting_ends_at).getTime() - (tick + nowOffset)) / 1000) : 0;
-  const maxDur = session?.duration_seconds || 30;
-  const timeLeft = Math.max(0, Math.min(rawLeft, maxDur));
+  const timeLeft = Math.max(0, rawLeft);
   useEffect(() => { if (current?.status === "voting") syncTime(); }, [current?.id, current?.status, syncTime]);
 
   useEffect(() => {
