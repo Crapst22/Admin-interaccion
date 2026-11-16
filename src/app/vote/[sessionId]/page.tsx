@@ -14,10 +14,11 @@ export default function VotePage({ params }: { params: { sessionId: string } }) 
   const [error, setError] = useState<string | null>(null);
   const [nowOffset, setNowOffset] = useState(0);
   const [tick, setTick] = useState(Date.now());
+  const [localEnd, setLocalEnd] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   async function syncTime() {
-    try { const r = await fetch(`/api/time`); const j = await r.json(); setNowOffset(j.now - Date.now()); } catch {}
+    try { const r = await fetch(`/api/time`, { cache: "no-store" }); const j = await r.json(); setNowOffset(j.now - Date.now()); } catch {}
   }
 
   async function loadAll(sess?: Session | null) {
@@ -34,6 +35,18 @@ export default function VotePage({ params }: { params: { sessionId: string } }) 
   }
 
   useEffect(() => { const t = setInterval(() => setTick(Date.now()), 250); return () => clearInterval(t); }, []);
+
+  const duration = session?.duration_seconds || 30;
+
+  useEffect(() => {
+    if (match?.status !== "voting") { setLocalEnd(null); return; }
+    const durationMs = duration * 1000;
+    const endsAt = match.voting_ends_at ? new Date(match.voting_ends_at).getTime() : null;
+    if (!endsAt) { setLocalEnd(Date.now() + durationMs); return; }
+    const remaining = endsAt - (Date.now() + nowOffset);
+    if (remaining <= 0) { setLocalEnd(Date.now() - 1); return; }
+    setLocalEnd(remaining <= durationMs + 3000 ? Date.now() + remaining : Date.now() + durationMs);
+  }, [match?.id, match?.status, match?.voting_ends_at, duration, nowOffset]);
 
   useEffect(() => {
     loadAll(); syncTime();
@@ -60,10 +73,8 @@ export default function VotePage({ params }: { params: { sessionId: string } }) 
 
   const a = match?.item_a_id ? items[match.item_a_id] : null;
   const b = match?.item_b_id ? items[match.item_b_id] : null;
-  const ended = match?.voting_ends_at ? (tick + nowOffset) > new Date(match.voting_ends_at).getTime() : false;
-  const duration = session?.duration_seconds || 30;
-  const rawTimeLeft = match?.voting_ends_at ? Math.max(0, Math.ceil((new Date(match.voting_ends_at).getTime() - (tick + nowOffset)) / 1000)) : duration;
-  const timeLeft = Math.min(rawTimeLeft, duration);
+  const ended = localEnd ? tick >= localEnd : false;
+  const timeLeft = localEnd ? Math.max(0, Math.ceil((localEnd - tick) / 1000)) : duration;
   const active = session?.status === "running" && match?.status === "voting" && !ended;
 
   if (loading) return <main className="min-h-screen flex items-center justify-center p-6"><p className="text-xl">Cargando…</p></main>;
