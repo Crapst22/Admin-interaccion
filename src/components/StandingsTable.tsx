@@ -21,7 +21,7 @@ export default function StandingsTable({ standings }: { standings: Standing[] })
               <td className="py-2">
                 <div className="flex items-center gap-2">
                   <div className="relative w-8 h-8 rounded overflow-hidden bg-slate-700 shrink-0">
-                    {s.image_url ? <Image src={s.image_url} alt="" fill className="object-cover" unoptimized /> : null}
+                    {s.image_url ? <Image src={s.image_url} alt="" fill className="object-contain" unoptimized /> : null}
                   </div>
                   <span className="font-medium">{s.name}</span>
                 </div>

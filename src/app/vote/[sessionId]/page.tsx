@@ -13,6 +13,7 @@ export default function VotePage({ params }: { params: { sessionId: string } }) 
   const [voted, setVoted] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [nowOffset, setNowOffset] = useState(0);
+  const [tick, setTick] = useState(Date.now());
   const [loading, setLoading] = useState(true);
 
   async function syncTime() {
@@ -31,6 +32,8 @@ export default function VotePage({ params }: { params: { sessionId: string } }) 
     } else setMatch(null);
     setLoading(false);
   }
+
+  useEffect(() => { const t = setInterval(() => setTick(Date.now()), 250); return () => clearInterval(t); }, []);
 
   useEffect(() => {
     loadAll(); syncTime();
@@ -57,7 +60,10 @@ export default function VotePage({ params }: { params: { sessionId: string } }) 
 
   const a = match?.item_a_id ? items[match.item_a_id] : null;
   const b = match?.item_b_id ? items[match.item_b_id] : null;
-  const ended = match?.voting_ends_at ? (Date.now() + nowOffset) > new Date(match.voting_ends_at).getTime() : false;
+  const ended = match?.voting_ends_at ? (tick + nowOffset) > new Date(match.voting_ends_at).getTime() : false;
+  const duration = session?.duration_seconds || 30;
+  const rawTimeLeft = match?.voting_ends_at ? Math.max(0, Math.ceil((new Date(match.voting_ends_at).getTime() - (tick + nowOffset)) / 1000)) : duration;
+  const timeLeft = Math.min(rawTimeLeft, duration);
   const active = session?.status === "running" && match?.status === "voting" && !ended;
 
   if (loading) return <main className="min-h-screen flex items-center justify-center p-6"><p className="text-xl">Cargando…</p></main>;
@@ -91,12 +97,16 @@ export default function VotePage({ params }: { params: { sessionId: string } }) 
 
   return (
     <main className="min-h-screen flex flex-col p-4 gap-4">
-      <h1 className="text-center text-2xl font-bold">¿Cuál pasa?</h1>
+      <div className="flex flex-col items-center gap-2">
+        <h1 className="text-center text-2xl font-bold">¿Cuál pasa?</h1>
+        <div className="text-3xl font-mono font-bold text-cyan-300">{timeLeft}s</div>
+        <div className="w-full max-w-md h-2 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-cyan-400 transition-all" style={{ width: `${Math.min(100, (timeLeft / duration) * 100)}%` }} /></div>
+      </div>
       {error && <p className="text-center text-rose-400">{error}</p>}
       <div className="flex-1 grid grid-rows-2 gap-4">
         {([["a", a], ["b", b]] as const).map(([key, it]) => (
           <button key={key} disabled={!it} onClick={()=>vote(key)} className="card relative overflow-hidden flex flex-col items-center justify-center p-4 active:scale-[0.99] transition border-2 border-transparent hover:border-amber-500 disabled:opacity-40">
-            {it ? (<><div className="relative w-40 h-40 sm:w-56 sm:h-56 rounded-xl overflow-hidden bg-slate-900"><Image src={it.image_url} alt={it.name} fill className="object-cover" unoptimized /></div><span className="mt-3 text-2xl sm:text-3xl font-extrabold text-center">{it.name}</span></>) : <span>—</span>}
+            {it ? (<><div className="relative w-40 h-40 sm:w-56 sm:h-56 rounded-xl overflow-hidden bg-slate-900"><Image src={it.image_url} alt={it.name} fill className="object-contain" unoptimized /></div><span className="mt-3 text-2xl sm:text-3xl font-extrabold text-center">{it.name}</span></>) : <span>—</span>}
           </button>
         ))}
       </div>
