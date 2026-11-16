@@ -145,7 +145,7 @@ export default function HostPage() {
       <main className="min-h-screen p-6 md:p-10 flex flex-col items-center gap-6 relative">
         <Confetti />
         <h1 className="text-5xl font-extrabold text-amber-400 text-center">¡Ganador!</h1>
-        {champion && <div className="card p-6 flex flex-col items-center gap-3"><div className="relative w-48 h-48 rounded-xl overflow-hidden"><Image src={champion.image_url} alt={champion.name} fill className="object-contain" unoptimized /></div><p className="text-4xl font-extrabold">{champion.name}</p></div>}
+        {champion && <div className="card p-6 flex flex-col items-center gap-3"><div className="relative w-full max-w-lg aspect-[1600/836] rounded-xl overflow-hidden bg-slate-900"><Image src={champion.image_url} alt={champion.name} fill className="object-contain" unoptimized /></div><p className="text-4xl font-extrabold">{champion.name}</p></div>}
         <div className="w-full flex flex-col lg:flex-row gap-6 items-start justify-center">
           <StandingsTable standings={standings} />
           <div className="flex flex-col gap-3">
@@ -175,7 +175,7 @@ export default function HostPage() {
           <motion.div key={current.id} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 1.02, opacity: 0 }} className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
             {[{ it: a, v: current.votes_a }, { it: b, v: current.votes_b }].map((side, idx) => (
               <div key={idx} className="card p-4 md:p-8 flex flex-col items-center justify-center text-center gap-4">
-                {side.it && <div className="relative w-40 h-40 md:w-64 md:h-64 rounded-xl overflow-hidden bg-slate-900"><Image src={side.it.image_url} alt={side.it.name} fill className="object-contain" unoptimized /></div>}
+                {side.it && <div className="relative w-full max-w-md lg:max-w-xl aspect-[1600/836] rounded-xl overflow-hidden bg-slate-900"><Image src={side.it.image_url} alt={side.it.name} fill className="object-contain" unoptimized /></div>}
                 <p className="text-3xl md:text-5xl font-extrabold">{side.it?.name || "—"}</p>
                 <motion.p key={side.v} initial={{ scale: 1.3 }} animate={{ scale: 1 }} className="text-6xl md:text-7xl font-black text-amber-400">{side.v}</motion.p>
                 <div className="w-full h-4 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-amber-500" style={{ width: `${(side.v / total) * 100}%` }} /></div>

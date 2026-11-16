@@ -106,7 +106,7 @@ export default function VotePage({ params }: { params: { sessionId: string } }) 
       <div className="flex-1 grid grid-rows-2 gap-4">
         {([["a", a], ["b", b]] as const).map(([key, it]) => (
           <button key={key} disabled={!it} onClick={()=>vote(key)} className="card relative overflow-hidden flex flex-col items-center justify-center p-4 active:scale-[0.99] transition border-2 border-transparent hover:border-amber-500 disabled:opacity-40">
-            {it ? (<><div className="relative w-40 h-40 sm:w-56 sm:h-56 rounded-xl overflow-hidden bg-slate-900"><Image src={it.image_url} alt={it.name} fill className="object-contain" unoptimized /></div><span className="mt-3 text-2xl sm:text-3xl font-extrabold text-center">{it.name}</span></>) : <span>—</span>}
+            {it ? (<><div className="relative w-full max-w-md aspect-[1600/836] rounded-xl overflow-hidden bg-slate-900"><Image src={it.image_url} alt={it.name} fill className="object-contain" unoptimized /></div><span className="mt-3 text-2xl sm:text-3xl font-extrabold text-center">{it.name}</span></>) : <span>—</span>}
           </button>
         ))}
       </div>

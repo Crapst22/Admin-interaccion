@@ -90,7 +90,7 @@ export default function BracketForm({ initialName = "", initialItems = [], brack
       <div className="space-y-4">
         {items.map((it, i) => (
           <div key={i} className="card p-4 flex flex-col sm:flex-row gap-4 items-start">
-            <div className="w-28 h-28 bg-slate-900 rounded-lg overflow-hidden flex items-center justify-center shrink-0 relative">
+            <div className="w-56 max-w-full aspect-[1600/836] bg-slate-900 rounded-lg overflow-hidden flex items-center justify-center shrink-0 relative">
               {(it.preview || it.image_url) ? <Image src={it.preview || it.image_url} alt="" fill className="object-contain" unoptimized /> : <span className="text-slate-500 text-xs text-center px-2">Sin imagen</span>}
             </div>
             <div className="flex-1 space-y-2 w-full">
