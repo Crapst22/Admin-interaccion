@@ -3,33 +3,54 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Item, Match, Session } from "@/types/db";
-import { generateBracket, computeStandings, BracketMatch, Standing } from "@/lib/bracket";
+import { generateTurns, computeResults, type TurnMatch, type ClassificationResult } from "@/lib/bracket";
 import { QRCodeSVG } from "qrcode.react";
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
-import Confetti from "@/components/Confetti";
 import StandingsTable from "@/components/StandingsTable";
+
+function Bars({ high, medium, low }: { high: number; medium: number; low: number }) {
+  const max = Math.max(1, high, medium, low);
+  const rows = [
+    { label: "Alta", value: high, color: "bg-red-500", text: "text-red-400" },
+    { label: "Media", value: medium, color: "bg-orange-500", text: "text-orange-400" },
+    { label: "Baja", value: low, color: "bg-yellow-400", text: "text-yellow-300" },
+  ];
+  return (
+    <div className="w-full max-w-2xl space-y-4">
+      {rows.map(r => (
+        <div key={r.label} className="flex items-center gap-3">
+          <div className={`w-16 text-right font-bold ${r.text}`}>{r.label}</div>
+          <div className="flex-1 h-10 bg-slate-800 rounded-lg overflow-hidden border border-slate-700">
+            <div className={`${r.color} h-full rounded-lg transition-all duration-300`} style={{ width: `${(r.value / max) * 100}%` }} />
+          </div>
+          <div className="w-10 text-left text-xl font-extrabold">{r.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function HostPage() {
   const params = useParams<{ id: string }>();
   const bracketId = params.id;
   const supabase = useMemo(() => createClient(), []);
   const [bracketName, setBracketName] = useState("");
+  const [bracketTitle, setBracketTitle] = useState("");
   const [items, setItems] = useState<Item[]>([]);
-  const [durationInput, setDurationInput] = useState("");
-  const [nodes, setNodes] = useState<BracketMatch[]>([]);
+  const [durationInput, setDurationInput] = useState("30");
+  const [turns, setTurns] = useState<TurnMatch[]>([]);
   const [session, setSession] = useState<Session | null>(null);
   const [dbMatches, setDbMatches] = useState<Match[]>([]);
   const [tick, setTick] = useState(Date.now());
-  const [notice, setNotice] = useState<string | null>(null);
-  const [standings, setStandings] = useState<Standing[]>([]);
+  const [results, setResults] = useState<ClassificationResult[]>([]);
   const [paused, setPaused] = useState(false);
   const [localEnd, setLocalEnd] = useState<number | null>(null);
   const autoAdvancing = useRef(false);
 
   useEffect(() => { (async () => {
-    const { data: b } = await supabase.from("brackets").select("id,name").eq("id", bracketId).single();
-    if (b) setBracketName((b as { name: string }).name);
+    const { data: b } = await supabase.from("brackets").select("id,name,title").eq("id", bracketId).single();
+    if (b) { const bb = b as { name: string; title?: string }; setBracketName(bb.name); setBracketTitle(bb.title || ""); }
     const { data: its } = await supabase.from("items").select("*").eq("bracket_id", bracketId).order("position");
     setItems((its || []) as Item[]);
   })(); }, [bracketId, supabase]);
@@ -38,22 +59,18 @@ export default function HostPage() {
 
   const siteUrl = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_SITE_URL || window.location.origin) : "";
   const voteUrl = session ? `${siteUrl}/vote/${session.id}` : "";
+  const itemMap = useMemo(() => { const m: Record<string, Item> = {}; items.forEach(i => { m[i.id] = i; }); return m; }, [items]);
 
-  function doGenerate() {
-    if (items.length < 2) { alert("Agregá al menos 2 elementos"); return; }
-    setNodes(generateBracket(items.map(i => ({ id: i.id, name: i.name, image_url: i.image_url }))));
+  function prepareTurns() {
+    if (items.length < 1) { alert("Agregá al menos 1 elemento"); return; }
+    setTurns(generateTurns(items.map(i => ({ id: i.id, name: i.name, image_url: i.image_url }))));
   }
 
   async function createSession() {
-    if (nodes.length === 0) return;
-    if (items.length < 2) { alert("Agregá al menos 2 elementos"); return; }
-    const payload = nodes.map(n => ({
-      round: n.round, slot: n.slot, item_a_id: n.item_a_id, item_b_id: n.item_b_id,
-      winner_id: n.winner_id, status: n.status, votes_a: n.votes_a, votes_b: n.votes_b,
-      next_index: n.next_index, next_slot: n.next_slot, is_bye: n.is_bye, tie_broken: n.tie_broken,
-    }));
+    if (turns.length === 0) return;
     const parsed = parseInt(durationInput, 10);
     const safeDuration = Math.max(5, Math.min(300, Number.isFinite(parsed) ? parsed : 30));
+    const payload = turns.map(t => ({ slot: t.slot, item_id: t.item_id }));
     const res = await fetch("/api/sessions/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bracket_id: bracketId, duration_seconds: safeDuration, matches: payload }) });
     const j = await res.json();
     if (!res.ok) { alert(j.error || "Error"); return; }
@@ -61,7 +78,7 @@ export default function HostPage() {
   }
 
   const loadDbMatches = useCallback(async (sessionId: string) => {
-    const { data } = await supabase.from("matches").select("*").eq("session_id", sessionId).order("round").order("slot");
+    const { data } = await supabase.from("matches").select("*").eq("session_id", sessionId).order("slot");
     setDbMatches((data || []) as Match[]);
   }, [supabase]);
   const refreshSession = useCallback(async (sessionId: string) => {
@@ -82,14 +99,11 @@ export default function HostPage() {
   }, [session, supabase]);
 
   const current = dbMatches.find(m => m.id === session?.current_match_id) || null;
-  const itemMap = useMemo(() => { const m: Record<string, Item> = {}; items.forEach(i => { m[i.id] = i; }); return m; }, [items]);
   useEffect(() => {
     if (current?.status === "voting") setLocalEnd(Date.now() + (session?.duration_seconds || 30) * 1000);
     else setLocalEnd(null);
   }, [current?.id, current?.status, session?.duration_seconds]);
-  const timeLeft = localEnd
-    ? Math.max(0, Math.ceil((localEnd - tick) / 1000))
-    : (current?.status === "voting" ? (session?.duration_seconds || 30) : 0);
+  const timeLeft = localEnd ? Math.max(0, Math.ceil((localEnd - tick) / 1000)) : (current?.status === "voting" ? (session?.duration_seconds || 30) : 0);
 
   useEffect(() => {
     if (!session || !current || current.status !== "voting" || paused) return;
@@ -97,117 +111,74 @@ export default function HostPage() {
       autoAdvancing.current = true;
       const sid = session.id; const mid = current.id;
       (async () => {
-        const res = await fetch(`/api/sessions/${sid}/advance`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ match_id: mid }) });
-        const j = await res.json().catch(() => ({}));
+        await fetch(`/api/sessions/${sid}/advance`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ match_id: mid }) });
         await loadDbMatches(sid); await refreshSession(sid);
-        if (j.tie_broken) setNotice("Empate, decidido al azar");
-        setTimeout(() => { setNotice(null); autoAdvancing.current = false; }, 2500);
+        setTimeout(() => { autoAdvancing.current = false; }, 1500);
       })();
     }
   }, [timeLeft, current, paused, session, loadDbMatches, refreshSession]);
-
   useEffect(() => { if (current?.status === "voting") autoAdvancing.current = false; }, [current?.id, current?.status]);
 
   useEffect(() => {
     if (session?.status === "finished" && dbMatches.length) {
-      const st = computeStandings(items.map(i => ({ id: i.id, name: i.name, image_url: i.image_url })), dbMatches as unknown as BracketMatch[]);
-      setStandings(st);
+      setResults(computeResults(items.map(i => ({ id: i.id, name: i.name, image_url: i.image_url })), dbMatches));
     }
   }, [session?.status, dbMatches, items]);
 
-  async function start() {
-    if (!session) return;
-    if (items.length < 2) { alert("Agregá al menos 2 elementos"); return; }
-    await fetch(`/api/sessions/${session.id}/start`, { method: "POST" });
-    await loadDbMatches(session.id); await refreshSession(session.id);
-  }
+  async function start() { if (!session) return; await fetch(`/api/sessions/${session.id}/start`, { method: "POST" }); await loadDbMatches(session.id); await refreshSession(session.id); }
   async function skip() { if (!session) return; await fetch(`/api/sessions/${session.id}/advance`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ match_id: session.current_match_id }) }); await loadDbMatches(session.id); await refreshSession(session.id); }
   async function togglePause() { if (!session) return; const action = paused ? "resume" : "pause"; await fetch(`/api/sessions/${session.id}/pause`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) }); setPaused(!paused); }
-  async function newSession() { if (!session) return; await fetch(`/api/sessions/${session.id}/reset`, { method: "POST" }); setSession(null); setDbMatches([]); setStandings([]); setNotice(null); setPaused(false); }
-
-  const rounds = useMemo(() => {
-    const r: Record<number, Match[]> = {}; dbMatches.forEach(m => { (r[m.round] = r[m.round] || []).push(m); });
-    Object.values(r).forEach(a => a.sort((x, y) => x.slot - y.slot)); return r;
-  }, [dbMatches]);
-  const previewRounds = useMemo(() => {
-    const r: Record<number, BracketMatch[]> = {}; nodes.forEach(m => { (r[m.round] = r[m.round] || []).push(m); });
-    Object.values(r).forEach(a => a.sort((x, y) => x.slot - y.slot)); return r;
-  }, [nodes]);
-  const roundNums = (dbMatches.length ? Object.keys(rounds) : Object.keys(previewRounds)).map(Number).sort((a, b) => a - b);
-
-  const championId = session?.status === "finished" && roundNums.length ? (rounds[Math.max(...roundNums)]?.[0]?.winner_id ?? null) : null;
-  const champion = championId ? itemMap[championId] : null;
+  async function newSession() { if (!session) return; await fetch(`/api/sessions/${session.id}/reset`, { method: "POST" }); setSession(null); setDbMatches([]); setResults([]); setPaused(false); }
 
   if (!bracketName && !items.length) return <main className="min-h-screen flex items-center justify-center">Cargando…</main>;
 
   if (session?.status === "finished") {
     return (
-      <main className="min-h-screen p-6 md:p-10 flex flex-col items-center gap-6 relative">
-        <Confetti />
-        <h1 className="text-5xl font-extrabold text-amber-400 text-center">¡Ganador!</h1>
-        {champion && <div className="card p-6 flex flex-col items-center gap-3"><div className="relative w-full max-w-lg aspect-[1600/836] rounded-xl overflow-hidden bg-slate-900"><Image src={champion.image_url} alt={champion.name} fill className="object-contain" unoptimized /></div><p className="text-4xl font-extrabold">{champion.name}</p></div>}
-        <div className="w-full flex flex-col lg:flex-row gap-6 items-start justify-center">
-          <StandingsTable standings={standings} />
-          <div className="flex flex-col gap-3">
-            <button onClick={newSession} className="btn btn-primary text-lg px-6 py-3">Nueva votación</button>
-            <a href="/dashboard" className="btn btn-secondary text-lg px-6 py-3 text-center">Volver al dashboard</a>
-          </div>
+      <main className="min-h-screen p-6 md:p-10 flex flex-col items-center gap-6">
+        {bracketTitle && <h1 className="text-4xl md:text-5xl font-extrabold text-center text-amber-300">{bracketTitle}</h1>}
+        <StandingsTable results={results} />
+        <div className="flex gap-3 flex-wrap justify-center">
+          <button onClick={newSession} className="btn btn-primary text-lg px-6 py-3">Nueva votación</button>
+          <a href="/dashboard" className="btn btn-secondary text-lg px-6 py-3 text-center">Volver al dashboard</a>
         </div>
       </main>
     );
   }
 
   if (session && session.status === "running" && current && current.status === "voting") {
-    const a = current.item_a_id ? itemMap[current.item_a_id] : null;
-    const b = current.item_b_id ? itemMap[current.item_b_id] : null;
-    const total = current.votes_a + current.votes_b || 1;
+    const it = current.item_id ? itemMap[current.item_id] : null;
+    const pct = Math.min(100, (timeLeft / (session.duration_seconds || 1)) * 100);
     return (
-      <main className="min-h-screen p-4 md:p-8 flex flex-col">
-        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-          <div className="flex items-center gap-3"><a href="/dashboard" className="btn btn-secondary">← Dashboard</a><h2 className="text-2xl font-bold">{bracketName}</h2></div>
+      <main className="min-h-screen p-4 md:p-8 flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3"><a href="/dashboard" className="btn btn-secondary">← Dashboard</a></div>
           <div className="flex gap-2 flex-wrap">
             <button onClick={togglePause} className="btn btn-secondary">{paused ? "Reanudar" : "Pausar"}</button>
             <button onClick={skip} className="btn btn-secondary">Saltar</button>
           </div>
         </div>
-        {notice && <div className="text-center text-amber-300 text-2xl font-bold mb-2">{notice}</div>}
+        {bracketTitle && <h1 className="text-3xl md:text-5xl font-extrabold text-center text-amber-300">{bracketTitle}</h1>}
+        <div className="w-full max-w-3xl mx-auto flex flex-col items-center gap-2">
+          <div className="text-4xl font-mono font-bold text-cyan-300">{timeLeft}s</div>
+          <div className="w-full h-4 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-cyan-400 transition-all" style={{ width: `${pct}%` }} /></div>
+        </div>
         <AnimatePresence mode="wait">
-          <motion.div key={current.id} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 1.02, opacity: 0 }} className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
-            {[{ it: a, v: current.votes_a }, { it: b, v: current.votes_b }].map((side, idx) => (
-              <div key={idx} className="card p-4 md:p-8 flex flex-col items-center justify-center text-center gap-4">
-                {side.it && <div className="relative w-full max-w-md lg:max-w-xl aspect-[1600/836] rounded-xl overflow-hidden bg-slate-900"><Image src={side.it.image_url} alt={side.it.name} fill className="object-contain" unoptimized /></div>}
-                <p className="text-3xl md:text-5xl font-extrabold">{side.it?.name || "—"}</p>
-                <motion.p key={side.v} initial={{ scale: 1.3 }} animate={{ scale: 1 }} className="text-6xl md:text-7xl font-black text-amber-400">{side.v}</motion.p>
-                <div className="w-full h-4 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-amber-500" style={{ width: `${(side.v / total) * 100}%` }} /></div>
+          <motion.div key={current.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col items-center gap-6">
+            {it && (
+              <div className="card p-4 flex flex-col items-center gap-3 w-full max-w-2xl">
+                <div className="relative w-full max-w-xl aspect-[1600/836] rounded-xl overflow-hidden bg-slate-900">
+                  <Image src={it.image_url} alt={it.name} fill className="object-contain" unoptimized />
+                </div>
+                <p className="text-3xl md:text-4xl font-extrabold text-center">{it.name}</p>
               </div>
-            ))}
+            )}
+            <Bars high={current.votes_high || 0} medium={current.votes_medium || 0} low={current.votes_low || 0} />
           </motion.div>
         </AnimatePresence>
-        <div className="mt-6 flex flex-col items-center gap-2">
-          <div className="text-5xl font-mono font-bold text-cyan-300">{timeLeft}s</div>
-          <div className="w-full max-w-xl h-3 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-cyan-400 transition-all" style={{ width: `${Math.min(100, (timeLeft / (session.duration_seconds || 1)) * 100)}%` }} /></div>
-          <div className="text-slate-400">Votá en: <span className="text-white break-all">{voteUrl}</span></div>
-        </div>
+        <div className="text-center text-slate-400">Votá en: <span className="text-white break-all">{voteUrl}</span></div>
       </main>
     );
   }
-
-  const renderMatchCard = (m: Match | BracketMatch) => {
-    const aId = m.item_a_id; const bId = m.item_b_id;
-    const aName = aId ? itemMap[aId]?.name : "—";
-    const bName = bId ? itemMap[bId]?.name : (m.is_bye ? "Pasa directo" : "—");
-    const win = m.winner_id;
-    const active = m.status === "voting";
-    return (
-      <div key={`${m.round}-${m.slot}-${("id" in m && m.id) || "p"}`} className={`card p-3 text-sm ${active ? "ring-2 ring-amber-400" : ""} ${m.is_bye ? "border-dashed border-cyan-500/50 bg-cyan-950/20" : ""}`}>
-        {m.is_bye && <div className="text-[10px] uppercase tracking-wider text-cyan-300 mb-1 font-bold">Pasa directo</div>}
-        <div className={`p-1 rounded ${win && win === aId ? "bg-emerald-700/60 font-bold" : ""}`}>{aName} <span className="text-slate-400">({m.votes_a ?? 0})</span></div>
-        <div className="text-slate-500 text-xs my-1">vs</div>
-        <div className={`p-1 rounded ${win && win === bId ? "bg-emerald-700/60 font-bold" : ""}`}>{bName} {!m.is_bye && <span className="text-slate-400">({m.votes_b ?? 0})</span>}</div>
-        {m.tie_broken && <div className="text-xs text-amber-300 mt-1">Empate, decidido al azar</div>}
-      </div>
-    );
-  };
 
   return (
     <main className="min-h-screen p-6 md:p-10">
@@ -218,14 +189,14 @@ export default function HostPage() {
         </div>
         {session && <button onClick={newSession} className="btn btn-danger">Reiniciar sesión</button>}
       </div>
+      {bracketTitle && <p className="text-xl text-amber-300 mb-4 font-semibold">{bracketTitle}</p>}
 
       {!session && (
         <div className="card p-5 mb-6 flex flex-col md:flex-row gap-4 items-end flex-wrap">
-          <div><label>Segundos por enfrentamiento</label><input type="number" min={5} max={300} placeholder="30" className="input mt-1 w-40" value={durationInput} onChange={e => setDurationInput(e.target.value)} /></div>
-          <button onClick={doGenerate} className="btn btn-secondary">Generar llave</button>
-          <button onClick={doGenerate} className="btn btn-secondary">Volver a mezclar</button>
-          {nodes.length > 0 && <button onClick={createSession} className="btn btn-primary">Crear sala y mostrar QR</button>}
-          {items.length < 2 && <span className="text-rose-400">Agregá al menos 2 elementos</span>}
+          <div><label>Segundos por turno</label><input type="number" min={5} max={300} placeholder="30" className="input mt-1 w-40" value={durationInput} onChange={e => setDurationInput(e.target.value)} /></div>
+          <button onClick={prepareTurns} className="btn btn-secondary">Preparar turnos</button>
+          {turns.length > 0 && <button onClick={createSession} className="btn btn-primary">Crear sala y mostrar QR</button>}
+          {items.length < 1 && <span className="text-rose-400">Agregá al menos 1 elemento</span>}
         </div>
       )}
 
@@ -242,24 +213,29 @@ export default function HostPage() {
 
       {session && session.status === "running" && !current && (
         <div className="card p-6 mb-6 text-center">
-          <p className="text-2xl mb-3">Preparando siguiente enfrentamiento…</p>
-          {notice && <p className="text-amber-300 text-xl mb-3">{notice}</p>}
+          <p className="text-2xl mb-3">Preparando siguiente turno…</p>
           <button onClick={async () => { await loadDbMatches(session.id); await refreshSession(session.id); }} className="btn btn-secondary">Actualizar</button>
         </div>
       )}
 
-      <div className="overflow-auto">
-        <div className="flex gap-6 min-w-max pb-4 items-start">
-          {roundNums.map(r => {
-            const ms = dbMatches.length ? (rounds[r] || []) : (previewRounds[r] || []);
-            return (
-              <div key={r} className="flex flex-col gap-4 min-w-[230px]">
-                <h3 className="text-lg font-bold text-slate-300">Ronda {r}</h3>
-                {ms.map((m) => renderMatchCard(m as Match | BracketMatch))}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {(dbMatches.length ? dbMatches : turns).map((t, idx) => {
+          const itId = "item_id" in t ? t.item_id : (t as TurnMatch).item_id;
+          const it = itId ? itemMap[itId] : null;
+          const status = "status" in t ? t.status : "pending";
+          const active = status === "voting";
+          return (
+            <div key={idx} className={`card p-3 flex items-center gap-3 ${active ? "ring-2 ring-amber-400" : ""}`}>
+              <div className="relative w-14 h-14 rounded overflow-hidden bg-slate-800 shrink-0">
+                {it?.image_url && <Image src={it.image_url} alt="" fill className="object-contain" unoptimized />}
               </div>
-            );
-          })}
-        </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold truncate">{it?.name || "—"}</p>
+                <p className="text-xs text-slate-400">{status === "done" ? "Listo" : status === "voting" ? "Votando" : "Pendiente"}</p>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </main>
   );

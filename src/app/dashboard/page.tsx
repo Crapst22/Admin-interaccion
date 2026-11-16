@@ -22,14 +22,14 @@ export default async function DashboardPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
-  const { data: brackets } = await supabase.from("brackets").select("id,name,created_at,items(count)").eq("owner_id", user.id).order("created_at", { ascending: false });
+  const { data: brackets } = await supabase.from("brackets").select("id,name,title,created_at,items(count)").eq("owner_id", user.id).order("created_at", { ascending: false });
 
   return (
     <main className="page-wrap">
       <header className="flex items-center justify-between mb-8 gap-4">
         <div>
           <p className="text-amber-400/90 text-sm font-semibold uppercase tracking-widest mb-1">Panel</p>
-          <h1 className="title-xl">Mis llaves</h1>
+          <h1 className="title-xl">Mis listados</h1>
           <p className="text-slate-400 mt-1">{user.email}</p>
         </div>
         <div className="flex gap-2">
@@ -40,13 +40,14 @@ export default async function DashboardPage() {
       <div className="grid gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         <Link href="/brackets/new" className="card flex flex-col items-center justify-center min-h-[180px] border-dashed border-2 border-amber-500/60 hover:bg-slate-800 transition">
           <span className="text-6xl text-amber-400 leading-none">+</span>
-          <span className="mt-2 font-semibold">Crear nueva llave</span>
+          <span className="mt-2 font-semibold">Crear nuevo listado</span>
         </Link>
-        {(brackets || []).map((b: { id: string; name: string; items: { count: number }[] }) => (
+        {(brackets || []).map((b: { id: string; name: string; title?: string; items: { count: number }[] }) => (
           <div key={b.id} className="card p-5 flex flex-col justify-between min-h-[180px]">
             <div>
               <h2 className="text-xl font-bold">{b.name}</h2>
-              <p className="text-slate-400">{b.items?.[0]?.count ?? 0} elementos</p>
+              {b.title && <p className="text-amber-300/90 text-sm mt-1">{b.title}</p>}
+              <p className="text-slate-400 mt-1">{b.items?.[0]?.count ?? 0} riesgos</p>
             </div>
             <div className="flex flex-wrap gap-2 mt-4">
               <Link href={`/brackets/${b.id}/host`} className="btn btn-primary text-sm">Iniciar votación</Link>

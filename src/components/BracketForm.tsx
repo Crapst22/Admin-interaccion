@@ -20,15 +20,16 @@ async function compressImage(file: File, max = 800): Promise<File> {
   return new File([blob], file.name.replace(/\.\w+$/, ".jpg"), { type: "image/jpeg" });
 }
 
-export default function BracketForm({ initialName = "", initialItems = [], bracketId }: { initialName?: string; initialItems?: FormItem[]; bracketId?: string }) {
+export default function BracketForm({ initialName = "", initialTitle = "", initialItems = [], bracketId }: { initialName?: string; initialTitle?: string; initialItems?: FormItem[]; bracketId?: string }) {
   const [name, setName] = useState(initialName);
-  const [items, setItems] = useState<FormItem[]>(initialItems.length ? initialItems : [{ name: "", image_url: "" }, { name: "", image_url: "" }]);
+  const [title, setTitle] = useState(initialTitle);
+  const [items, setItems] = useState<FormItem[]>(initialItems.length ? initialItems : [{ name: "", image_url: "" }]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   function addItem() { setItems([...items, { name: "", image_url: "" }]); }
-  function removeItem(i: number) { if (items.length <= 2) return; setItems(items.filter((_, idx) => idx !== i)); }
+  function removeItem(i: number) { if (items.length <= 1) return; setItems(items.filter((_, idx) => idx !== i)); }
   function update(i: number, patch: Partial<FormItem>) { setItems(items.map((it, idx) => idx === i ? { ...it, ...patch } : it)); }
 
   async function onFile(i: number, file?: File) {
@@ -40,13 +41,15 @@ export default function BracketForm({ initialName = "", initialItems = [], brack
 
   function loadExample() {
     setName("Riesgos de administración");
+    setTitle("¿Cómo clasificarías estos riesgos?");
     setItems(EXAMPLE_ITEMS.map((n, i) => ({ name: n, image_url: exampleImageUrl(n, i) })));
   }
 
   async function save() {
     setError(null);
-    if (!name.trim()) return setError("Ingresá un nombre para la llave.");
-    if (items.length < 2) return setError("Agregá al menos 2 elementos.");
+    if (!name.trim()) return setError("Ingresá un nombre para el listado.");
+    if (!title.trim()) return setError("Ingresá una pregunta/título para mostrar en los turnos.");
+    if (items.length < 1) return setError("Agregá al menos 1 elemento.");
     if (items.some(it => !it.name.trim() || (!it.image_url && !it.file))) return setError("Cada elemento debe tener nombre e imagen.");
     setSaving(true);
     const supabase = createClient();
@@ -55,11 +58,10 @@ export default function BracketForm({ initialName = "", initialItems = [], brack
 
     let bid = bracketId;
     if (bid) {
-      await supabase.from("brackets").update({ name }).eq("id", bid);
-      // reemplazo simple: borrar items y recrear
+      await supabase.from("brackets").update({ name, title }).eq("id", bid);
       await supabase.from("items").delete().eq("bracket_id", bid);
     } else {
-      const { data, error } = await supabase.from("brackets").insert({ name, owner_id: user.id }).select("id").single();
+      const { data, error } = await supabase.from("brackets").insert({ name, title, owner_id: user.id }).select("id").single();
       if (error || !data) { setError(error?.message || "Error al crear"); setSaving(false); return; }
       bid = data.id;
     }
@@ -83,10 +85,11 @@ export default function BracketForm({ initialName = "", initialItems = [], brack
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h1 className="text-3xl font-bold">{bracketId ? "Editar llave" : "Nueva llave"}</h1>
+        <h1 className="text-3xl font-bold">{bracketId ? "Editar listado" : "Nuevo listado"}</h1>
         <button type="button" onClick={loadExample} className="btn btn-secondary text-sm">Cargar ejemplo</button>
       </div>
-      <div><label>Nombre de la llave</label><input className="input mt-1" value={name} onChange={e=>setName(e.target.value)} placeholder="Ej: Riesgos de administración" /></div>
+      <div><label>Nombre del listado</label><input className="input mt-1" value={name} onChange={e=>setName(e.target.value)} placeholder="Ej: Riesgos de administración" /></div>
+      <div><label>Pregunta / título (se muestra en todos los turnos)</label><input className="input mt-1" value={title} onChange={e=>setTitle(e.target.value)} placeholder="Ej: ¿Qué nivel de riesgo considerás que tiene?" /></div>
       <div className="space-y-4">
         {items.map((it, i) => (
           <div key={i} className="card p-4 flex flex-col sm:flex-row gap-4 items-start">
@@ -94,17 +97,17 @@ export default function BracketForm({ initialName = "", initialItems = [], brack
               {(it.preview || it.image_url) ? <Image src={it.preview || it.image_url} alt="" fill className="object-contain" unoptimized /> : <span className="text-slate-500 text-xs text-center px-2">Sin imagen</span>}
             </div>
             <div className="flex-1 space-y-2 w-full">
-              <div><label>Nombre del elemento</label><input className="input mt-1" value={it.name} onChange={e=>update(i,{name:e.target.value})} /></div>
+              <div><label>Nombre del riesgo</label><input className="input mt-1" value={it.name} onChange={e=>update(i,{name:e.target.value})} /></div>
               <div><label>Imagen</label><input className="mt-1 text-sm" type="file" accept="image/*" onChange={e=>onFile(i, e.target.files?.[0])} /></div>
             </div>
-            <button type="button" onClick={()=>removeItem(i)} disabled={items.length<=2} className="btn btn-danger text-sm">Eliminar</button>
+            <button type="button" onClick={()=>removeItem(i)} disabled={items.length<=1} className="btn btn-danger text-sm">Eliminar</button>
           </div>
         ))}
       </div>
       {error && <p className="text-rose-400">{error}</p>}
       <div className="flex gap-3">
         <button type="button" onClick={addItem} className="btn btn-secondary">Agregar elemento</button>
-        <button type="button" onClick={save} disabled={saving} className="btn btn-primary">{saving ? "Guardando..." : "Guardar llave"}</button>
+        <button type="button" onClick={save} disabled={saving} className="btn btn-primary">{saving ? "Guardando..." : "Guardar"}</button>
       </div>
     </div>
   );

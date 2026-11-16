@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(req: NextRequest) {
   try {
     const { match_id, device_id, choice } = await req.json();
-    if (!match_id || !device_id || !["a", "b"].includes(choice)) {
+    if (!match_id || !device_id || !["high", "medium", "low"].includes(choice)) {
       return NextResponse.json({ ok: false, error: "Datos inválidos." }, { status: 400 });
     }
     const admin = createAdminClient();

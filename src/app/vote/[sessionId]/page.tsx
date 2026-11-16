@@ -9,7 +9,8 @@ export default function VotePage({ params }: { params: { sessionId: string } }) 
   const supabase = useMemo(() => createClient(), []);
   const [session, setSession] = useState<Session | null>(null);
   const [match, setMatch] = useState<Match | null>(null);
-  const [items, setItems] = useState<Record<string, Item>>({});
+  const [item, setItem] = useState<Item | null>(null);
+  const [title, setTitle] = useState("");
   const [voted, setVoted] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [nowOffset, setNowOffset] = useState(0);
@@ -25,17 +26,20 @@ export default function VotePage({ params }: { params: { sessionId: string } }) 
     const s = sess ?? (await supabase.from("sessions").select("*").eq("id", params.sessionId).single()).data as Session | null;
     if (!s) { setLoading(false); return; }
     setSession(s);
-    const { data: its } = await supabase.from("items").select("*").eq("bracket_id", s.bracket_id);
-    const map: Record<string, Item> = {}; (its || []).forEach((i: Item) => { map[i.id] = i; }); setItems(map);
+    const { data: b } = await supabase.from("brackets").select("title").eq("id", s.bracket_id).single();
+    if (b) setTitle((b as { title?: string }).title || "");
     if (s.current_match_id) {
       const { data: m } = await supabase.from("matches").select("*").eq("id", s.current_match_id).single();
-      setMatch(m as Match);
-    } else setMatch(null);
+      const mm = m as Match | null; setMatch(mm);
+      if (mm?.item_id) {
+        const { data: it } = await supabase.from("items").select("*").eq("id", mm.item_id).single();
+        setItem((it as Item) || null);
+      } else setItem(null);
+    } else { setMatch(null); setItem(null); }
     setLoading(false);
   }
 
   useEffect(() => { const t = setInterval(() => setTick(Date.now()), 250); return () => clearInterval(t); }, []);
-
   const duration = session?.duration_seconds || 30;
 
   useEffect(() => {
@@ -55,24 +59,22 @@ export default function VotePage({ params }: { params: { sessionId: string } }) 
         const s = p.new as Session; setSession(s); loadAll(s); setVoted(null); setError(null);
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "matches", filter: `session_id=eq.${params.sessionId}` }, (p) => {
-        const m = p.new as Match; setMatch(cur => (cur?.id === m.id ? m : (cur ?? m)));
+        const m = p.new as Match; setMatch(cur => (cur?.id === m.id ? m : cur));
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.sessionId]);
 
-  async function vote(choice: "a" | "b") {
+  async function vote(choice: "high" | "medium" | "low") {
     if (!match) return; setError(null);
     const device_id = getDeviceId();
     const res = await fetch("/api/vote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ match_id: match.id, device_id, choice }) });
     const j = await res.json();
-    if (!j.ok) { setError(j.error || "No se pudo votar."); if ((j.error||"").includes("Ya registraste")) setVoted(choice); return; }
+    if (!j.ok) { setError(j.error || "No se pudo votar."); if ((j.error || "").includes("Ya registraste")) setVoted(choice); return; }
     setVoted(choice);
   }
 
-  const a = match?.item_a_id ? items[match.item_a_id] : null;
-  const b = match?.item_b_id ? items[match.item_b_id] : null;
   const ended = localEnd ? tick >= localEnd : false;
   const timeLeft = localEnd ? Math.max(0, Math.ceil((localEnd - tick) / 1000)) : duration;
   const active = session?.status === "running" && match?.status === "voting" && !ended;
@@ -81,7 +83,6 @@ export default function VotePage({ params }: { params: { sessionId: string } }) 
   if (!session) return <main className="min-h-screen flex items-center justify-center p-6"><p className="text-xl">Sesión no encontrada.</p></main>;
 
   if (session.status === "finished") {
-    // mostrar ganador si se puede inferir del último match done con mayor ronda? simplificado: mensaje
     return <main className="min-h-screen flex flex-col items-center justify-center p-6 text-center gap-4">
       <h1 className="text-4xl font-extrabold">¡Gracias por participar!</h1>
       <p className="text-slate-300 text-xl">La votación ha finalizado.</p>
@@ -89,37 +90,43 @@ export default function VotePage({ params }: { params: { sessionId: string } }) 
   }
 
   if (!active) {
-    const showWinner = match?.status === "done" && match.winner_id ? items[match.winner_id] : null;
     return <main className="min-h-screen flex flex-col items-center justify-center p-6 text-center gap-4">
       <h1 className="text-3xl font-bold">Esperá, la votación va a comenzar…</h1>
       <p className="text-slate-400">Se actualizará automáticamente.</p>
-      {showWinner && <div className="mt-4 card p-4"><p className="text-amber-400 font-semibold mb-2">Pasa a la siguiente ronda:</p><p className="text-2xl font-bold">{showWinner.name}</p></div>}
     </main>;
   }
 
   if (voted) {
-    const chosen = voted === "a" ? a : b;
+    const label = voted === "high" ? "Alta" : voted === "medium" ? "Media" : "Baja";
     return <main className="min-h-screen flex flex-col items-center justify-center p-6 text-center gap-4">
       <h1 className="text-4xl font-extrabold text-emerald-400">¡Voto registrado!</h1>
-      {chosen && <p className="text-2xl">Elegiste: <b>{chosen.name}</b></p>}
-      <p className="text-slate-400">Esperá el siguiente enfrentamiento…</p>
+      <p className="text-2xl">Elegiste: <b>{label}</b></p>
+      <p className="text-slate-400">Esperá el siguiente riesgo…</p>
     </main>;
   }
 
   return (
     <main className="min-h-screen flex flex-col p-4 gap-4">
       <div className="flex flex-col items-center gap-2">
-        <h1 className="text-center text-2xl font-bold">¿Cuál pasa?</h1>
+        {title && <p className="text-center text-lg font-semibold text-amber-300">{title}</p>}
         <div className="text-3xl font-mono font-bold text-cyan-300">{timeLeft}s</div>
         <div className="w-full max-w-md h-2 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-cyan-400 transition-all" style={{ width: `${Math.min(100, (timeLeft / duration) * 100)}%` }} /></div>
       </div>
+      <div className="flex-1 flex flex-col items-center justify-center gap-4">
+        {item && (
+          <div className="w-full max-w-md card p-4 flex flex-col items-center gap-3">
+            <div className="relative w-full aspect-[1600/836] rounded-xl overflow-hidden bg-slate-900">
+              <Image src={item.image_url} alt={item.name} fill className="object-contain" unoptimized />
+            </div>
+            <span className="text-2xl font-extrabold text-center">{item.name}</span>
+          </div>
+        )}
+      </div>
       {error && <p className="text-center text-rose-400">{error}</p>}
-      <div className="flex-1 grid grid-rows-2 gap-4">
-        {([["a", a], ["b", b]] as const).map(([key, it]) => (
-          <button key={key} disabled={!it} onClick={()=>vote(key)} className="card relative overflow-hidden flex flex-col items-center justify-center p-4 active:scale-[0.99] transition border-2 border-transparent hover:border-amber-500 disabled:opacity-40">
-            {it ? (<><div className="relative w-full max-w-md aspect-[1600/836] rounded-xl overflow-hidden bg-slate-900"><Image src={it.image_url} alt={it.name} fill className="object-contain" unoptimized /></div><span className="mt-3 text-2xl sm:text-3xl font-extrabold text-center">{it.name}</span></>) : <span>—</span>}
-          </button>
-        ))}
+      <div className="grid grid-cols-1 gap-3 pb-2">
+        <button onClick={() => vote("high")} className="w-full rounded-xl py-4 text-xl font-extrabold text-white bg-red-600 hover:bg-red-500 active:scale-[0.99] transition">Alta</button>
+        <button onClick={() => vote("medium")} className="w-full rounded-xl py-4 text-xl font-extrabold text-white bg-orange-500 hover:bg-orange-400 active:scale-[0.99] transition">Media</button>
+        <button onClick={() => vote("low")} className="w-full rounded-xl py-4 text-xl font-extrabold text-slate-900 bg-yellow-400 hover:bg-yellow-300 active:scale-[0.99] transition">Baja</button>
       </div>
     </main>
   );
