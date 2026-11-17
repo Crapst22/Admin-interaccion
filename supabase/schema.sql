@@ -122,6 +122,9 @@ create policy "images_auth_update" on storage.objects for update to authenticate
 drop policy if exists "images_auth_delete" on storage.objects;
 create policy "images_auth_delete" on storage.objects for delete to authenticated using (bucket_id = 'images');
 
+drop function if exists public.cast_vote(uuid, text, public.vote_choice);
+drop function if exists public.cast_vote(uuid, text, text);
+
 create or replace function public.cast_vote(p_match_id uuid, p_device_id text, p_choice text)
 returns json
 language plpgsql
@@ -131,6 +134,7 @@ as $$
 declare
   v_match record;
   v_choice public.vote_choice;
+  v_prev text;
 begin
   if p_choice not in ('high','medium','low') then
     return json_build_object('ok', false, 'error', 'Opción de voto inválida.');
@@ -150,15 +154,30 @@ begin
     return json_build_object('ok', false, 'error', 'El tiempo de votación ya terminó.');
   end if;
 
-  begin
-    insert into public.votes(match_id, device_id, choice) values (p_match_id, p_device_id, v_choice);
-  exception when unique_violation then
-    return json_build_object('ok', false, 'error', 'Ya registraste tu voto en este turno.');
-  end;
+  select choice::text into v_prev
+  from public.votes
+  where match_id = p_match_id and device_id = p_device_id;
 
-  if v_choice = 'high' then
+  if v_prev is null then
+    insert into public.votes(match_id, device_id, choice) values (p_match_id, p_device_id, v_choice);
+  elsif v_prev = p_choice then
+    return json_build_object('ok', true);
+  else
+    update public.votes set choice = v_choice
+    where match_id = p_match_id and device_id = p_device_id;
+
+    if v_prev = 'high' then
+      update public.matches set votes_high = greatest(0, votes_high - 1) where id = p_match_id;
+    elsif v_prev = 'medium' then
+      update public.matches set votes_medium = greatest(0, votes_medium - 1) where id = p_match_id;
+    elsif v_prev = 'low' then
+      update public.matches set votes_low = greatest(0, votes_low - 1) where id = p_match_id;
+    end if;
+  end if;
+
+  if p_choice = 'high' then
     update public.matches set votes_high = votes_high + 1 where id = p_match_id;
-  elsif v_choice = 'medium' then
+  elsif p_choice = 'medium' then
     update public.matches set votes_medium = votes_medium + 1 where id = p_match_id;
   else
     update public.matches set votes_low = votes_low + 1 where id = p_match_id;

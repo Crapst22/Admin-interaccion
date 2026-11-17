@@ -120,6 +120,16 @@ export default function HostPage() {
   useEffect(() => { if (current?.status === "voting") autoAdvancing.current = false; }, [current?.id, current?.status]);
 
   useEffect(() => {
+    const sid = session?.id;
+    if (!sid || current?.status !== "voting") return;
+    const iv = setInterval(async () => {
+      const { data } = await supabase.from("matches").select("*").eq("session_id", sid).order("slot");
+      if (data) setDbMatches(data as Match[]);
+    }, 1500);
+    return () => clearInterval(iv);
+  }, [session?.id, current?.status, supabase]);
+
+  useEffect(() => {
     if (session?.status === "finished" && dbMatches.length) {
       setResults(computeResults(items.map(i => ({ id: i.id, name: i.name, image_url: i.image_url })), dbMatches));
     }

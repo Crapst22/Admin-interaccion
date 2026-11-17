@@ -66,6 +66,17 @@ export default function VotePage({ params }: { params: { sessionId: string } }) 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.sessionId]);
 
+  useEffect(() => {
+    setVoted(null); setError(null);
+  }, [match?.id]);
+
+  useEffect(() => {
+    if (!session) return;
+    const iv = setInterval(() => { loadAll(); }, 2000);
+    return () => clearInterval(iv);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.id]);
+
   async function vote(choice: "high" | "medium" | "low") {
     if (!match) return; setError(null);
     const device_id = getDeviceId();
@@ -74,7 +85,6 @@ export default function VotePage({ params }: { params: { sessionId: string } }) 
     if (!j.ok) {
       const msg = j.detail ? `${j.error || "No se pudo votar."} (${j.detail})` : (j.error || "No se pudo votar.");
       setError(msg);
-      if ((j.error || "").includes("Ya registraste")) setVoted(choice);
       return;
     }
     setVoted(choice);
@@ -107,6 +117,8 @@ export default function VotePage({ params }: { params: { sessionId: string } }) 
       <h1 className="text-4xl font-extrabold text-emerald-400">¡Voto registrado!</h1>
       <p className="text-2xl">Elegiste: <b>{label}</b></p>
       <p className="text-slate-400">Esperá el siguiente riesgo.</p>
+      {error && <p className="text-center text-rose-400">{error}</p>}
+      <button onClick={() => { setVoted(null); setError(null); }} className="btn btn-secondary mt-2">Cambiar voto</button>
     </main>;
   }
 
