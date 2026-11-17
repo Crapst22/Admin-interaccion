@@ -122,7 +122,7 @@ create policy "images_auth_update" on storage.objects for update to authenticate
 drop policy if exists "images_auth_delete" on storage.objects;
 create policy "images_auth_delete" on storage.objects for delete to authenticated using (bucket_id = 'images');
 
-create or replace function public.cast_vote(p_match_id uuid, p_device_id text, p_choice vote_choice)
+create or replace function public.cast_vote(p_match_id uuid, p_device_id text, p_choice text)
 returns json
 language plpgsql
 security definer
@@ -130,7 +130,13 @@ set search_path = public
 as $$
 declare
   v_match record;
+  v_choice public.vote_choice;
 begin
+  if p_choice not in ('high','medium','low') then
+    return json_build_object('ok', false, 'error', 'Opción de voto inválida.');
+  end if;
+  v_choice := p_choice::public.vote_choice;
+
   select id, status, voting_ends_at into v_match
   from public.matches where id = p_match_id for update;
 
@@ -145,14 +151,14 @@ begin
   end if;
 
   begin
-    insert into public.votes(match_id, device_id, choice) values (p_match_id, p_device_id, p_choice);
+    insert into public.votes(match_id, device_id, choice) values (p_match_id, p_device_id, v_choice);
   exception when unique_violation then
     return json_build_object('ok', false, 'error', 'Ya registraste tu voto en este turno.');
   end;
 
-  if p_choice = 'high' then
+  if v_choice = 'high' then
     update public.matches set votes_high = votes_high + 1 where id = p_match_id;
-  elsif p_choice = 'medium' then
+  elsif v_choice = 'medium' then
     update public.matches set votes_medium = votes_medium + 1 where id = p_match_id;
   else
     update public.matches set votes_low = votes_low + 1 where id = p_match_id;
@@ -162,7 +168,7 @@ begin
 end;
 $$;
 
-revoke all on function public.cast_vote(uuid, text, vote_choice) from public, anon, authenticated;
+revoke all on function public.cast_vote(uuid, text, text) from public, anon, authenticated;
 
 do $$ begin
   alter publication supabase_realtime add table public.matches, public.sessions;

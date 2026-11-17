@@ -84,7 +84,7 @@ export default function VotePage({ params }: { params: { sessionId: string } }) 
   const timeLeft = localEnd ? Math.max(0, Math.ceil((localEnd - tick) / 1000)) : duration;
   const active = session?.status === "running" && match?.status === "voting" && !ended;
 
-  if (loading) return <main className="min-h-screen flex items-center justify-center p-6"><p className="text-xl">Cargando…</p></main>;
+  if (loading) return <main className="min-h-screen flex items-center justify-center p-6"><p className="text-xl">Cargando...</p></main>;
   if (!session) return <main className="min-h-screen flex items-center justify-center p-6"><p className="text-xl">Sesión no encontrada.</p></main>;
 
   if (session.status === "finished") {
@@ -96,7 +96,7 @@ export default function VotePage({ params }: { params: { sessionId: string } }) 
 
   if (!active) {
     return <main className="min-h-screen flex flex-col items-center justify-center p-6 text-center gap-4">
-      <h1 className="text-3xl font-bold">Esperá, la votación va a comenzar…</h1>
+      <h1 className="text-3xl font-bold">Esperá, la votación va a comenzar.</h1>
       <p className="text-slate-400">Se actualizará automáticamente.</p>
     </main>;
   }
@@ -106,7 +106,7 @@ export default function VotePage({ params }: { params: { sessionId: string } }) 
     return <main className="min-h-screen flex flex-col items-center justify-center p-6 text-center gap-4">
       <h1 className="text-4xl font-extrabold text-emerald-400">¡Voto registrado!</h1>
       <p className="text-2xl">Elegiste: <b>{label}</b></p>
-      <p className="text-slate-400">Esperá el siguiente riesgo…</p>
+      <p className="text-slate-400">Esperá el siguiente riesgo.</p>
     </main>;
   }
 

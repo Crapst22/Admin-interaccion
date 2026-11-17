@@ -62,7 +62,7 @@ export default function HostPage() {
   const itemMap = useMemo(() => { const m: Record<string, Item> = {}; items.forEach(i => { m[i.id] = i; }); return m; }, [items]);
 
   function prepareTurns() {
-    if (items.length < 1) { alert("AgregÃ¡ al menos 1 elemento"); return; }
+    if (items.length < 1) { alert("Agregá al menos 1 elemento"); return; }
     setTurns(generateTurns(items.map(i => ({ id: i.id, name: i.name, image_url: i.image_url }))));
   }
 
@@ -130,7 +130,7 @@ export default function HostPage() {
   async function togglePause() { if (!session) return; const action = paused ? "resume" : "pause"; await fetch(`/api/sessions/${session.id}/pause`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) }); setPaused(!paused); }
   async function newSession() { if (!session) return; await fetch(`/api/sessions/${session.id}/reset`, { method: "POST" }); setSession(null); setDbMatches([]); setResults([]); setPaused(false); }
 
-  if (!bracketName && !items.length) return <main className="min-h-screen flex items-center justify-center">Cargandoâ€¦</main>;
+  if (!bracketName && !items.length) return <main className="min-h-screen flex items-center justify-center">Cargando...</main>;
 
   if (session?.status === "finished") {
     return (
@@ -138,7 +138,7 @@ export default function HostPage() {
         {bracketTitle && <h1 className="text-4xl md:text-5xl font-extrabold text-center text-amber-300">{bracketTitle}</h1>}
         <StandingsTable results={results} />
         <div className="flex gap-3 flex-wrap justify-center">
-          <button onClick={newSession} className="btn btn-primary text-lg px-6 py-3">Nueva votaciÃ³n</button>
+          <button onClick={newSession} className="btn btn-primary text-lg px-6 py-3">Nueva votación</button>
           <a href="/dashboard" className="btn btn-secondary text-lg px-6 py-3 text-center">Volver al dashboard</a>
         </div>
       </main>
@@ -186,10 +186,10 @@ export default function HostPage() {
     <main className="min-h-screen p-6 md:p-10">
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <a href="/dashboard" className="btn btn-secondary">â† Dashboard</a>
+          <a href="/dashboard" className="btn btn-secondary">← Dashboard</a>
           <h1 className="text-4xl font-extrabold">{bracketName || "Presentador"}</h1>
         </div>
-        {session && <button onClick={newSession} className="btn btn-danger">Reiniciar sesiÃ³n</button>}
+        {session && <button onClick={newSession} className="btn btn-danger">Reiniciar sesión</button>}
       </div>
       {bracketTitle && <p className="text-xl text-amber-300 mb-4 font-semibold">{bracketTitle}</p>}
 
@@ -198,7 +198,7 @@ export default function HostPage() {
           <div><label>Segundos por turno</label><input type="number" min={5} max={300} placeholder="30" className="input mt-1 w-40" value={durationInput} onChange={e => setDurationInput(e.target.value)} /></div>
           <button onClick={prepareTurns} className="btn btn-secondary">Preparar turnos</button>
           {turns.length > 0 && <button onClick={createSession} className="btn btn-primary">Crear sala y mostrar QR</button>}
-          {items.length < 1 && <span className="text-rose-400">AgregÃ¡ al menos 1 elemento</span>}
+          {items.length < 1 && <span className="text-rose-400">Agregá al menos 1 elemento</span>}
         </div>
       )}
 
@@ -206,7 +206,7 @@ export default function HostPage() {
         <div className="card p-6 mb-6 flex flex-col md:flex-row items-center gap-8">
           <div className="bg-white p-4 rounded-xl">{voteUrl && <QRCodeSVG value={voteUrl} size={330} />}</div>
           <div>
-            <p className="text-xl mb-2">EscaneÃ¡ para votar</p>
+            <p className="text-xl mb-2">Escaneá para votar</p>
             <p className="text-amber-300 break-all text-lg font-mono">{voteUrl}</p>
             <button onClick={start} className="btn btn-primary text-xl mt-4 px-8 py-3">Iniciar</button>
           </div>
@@ -215,7 +215,7 @@ export default function HostPage() {
 
       {session && session.status === "running" && !current && (
         <div className="card p-6 mb-6 text-center">
-          <p className="text-2xl mb-3">Preparando siguiente turnoâ€¦</p>
+          <p className="text-2xl mb-3">Preparando siguiente turno...</p>
           <button onClick={async () => { await loadDbMatches(session.id); await refreshSession(session.id); }} className="btn btn-secondary">Actualizar</button>
         </div>
       )}
@@ -232,7 +232,7 @@ export default function HostPage() {
                 {it?.image_url && <Image src={it.image_url} alt="" fill className="object-contain" unoptimized />}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-semibold truncate">{it?.name || "â€”"}</p>
+                <p className="font-semibold truncate">{it?.name || "—"}</p>
                 <p className="text-xs text-slate-400">{status === "done" ? "Listo" : status === "voting" ? "Votando" : "Pendiente"}</p>
               </div>
             </div>
