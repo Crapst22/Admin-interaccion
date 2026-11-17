@@ -71,7 +71,12 @@ export default function VotePage({ params }: { params: { sessionId: string } }) 
     const device_id = getDeviceId();
     const res = await fetch("/api/vote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ match_id: match.id, device_id, choice }) });
     const j = await res.json();
-    if (!j.ok) { setError(j.error || "No se pudo votar."); if ((j.error || "").includes("Ya registraste")) setVoted(choice); return; }
+    if (!j.ok) {
+      const msg = j.detail ? `${j.error || "No se pudo votar."} (${j.detail})` : (j.error || "No se pudo votar.");
+      setError(msg);
+      if ((j.error || "").includes("Ya registraste")) setVoted(choice);
+      return;
+    }
     setVoted(choice);
   }
 
